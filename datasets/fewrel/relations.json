@@ -1,0 +1,115 @@
+{
+  "source_split": "FewRel val_wiki.json",
+  "selected_relation_ids": ["P25", "P26", "P40", "P206", "P410", "P463"],
+  "relations": [
+    {
+      "id": "P155",
+      "name": "follows",
+      "description": "immediately prior item in a series of which the subject is a part",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P177",
+      "name": "crosses",
+      "description": "obstacle such as a body of water or road which a bridge crosses or a tunnel goes under",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P206",
+      "name": "located in or next to body of water",
+      "description": "sea, lake, or river in or next to which the subject is located",
+      "subject_type": "LOCATION",
+      "object_type": "LOCATION",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P2094",
+      "name": "competition class",
+      "description": "official classification under which a sporting entity qualifies",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P25",
+      "name": "mother",
+      "description": "female parent of the subject",
+      "subject_type": "PERSON",
+      "object_type": "PERSON",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P26",
+      "name": "spouse",
+      "description": "the subject has the object as their spouse",
+      "subject_type": "PERSON",
+      "object_type": "PERSON",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P361",
+      "name": "part of",
+      "description": "object of which the subject is a part",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P364",
+      "name": "original language of film or TV show",
+      "description": "language in which a film or performance work was originally created",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P40",
+      "name": "child",
+      "description": "the subject has the object as a biological, foster, or adoptive child",
+      "subject_type": "PERSON",
+      "object_type": "PERSON",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P410",
+      "name": "military rank",
+      "description": "military rank achieved by a person or associated with a position",
+      "subject_type": "PERSON",
+      "object_type": "TITLE",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P412",
+      "name": "voice type",
+      "description": "a person's voice type",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P413",
+      "name": "position played on team / speciality",
+      "description": "position or specialism of a player on a team",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P463",
+      "name": "member of",
+      "description": "organization or club to which the subject belongs",
+      "subject_type": "PERSON",
+      "object_type": "ORGANIZATION",
+      "selected_for_fsre": true
+    },
+    {
+      "id": "P59",
+      "name": "constellation",
+      "description": "area of the celestial sphere of which the subject is a part",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P641",
+      "name": "sport",
+      "description": "sport in which the subject participates or belongs to",
+      "selected_for_fsre": false
+    },
+    {
+      "id": "P921",
+      "name": "main subject",
+      "description": "primary topic of a work",
+      "selected_for_fsre": false
+    }
+  ]
+}
+

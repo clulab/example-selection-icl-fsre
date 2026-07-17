@@ -1,0 +1,10 @@
+{
+  "dataset": "tacred",
+  "files": [
+    {
+      "bytes": 14323,
+      "path": "semantic_rules.jsonl.gz",
+      "sha256": "f0515ea2ea1ecc552a226b335cac2d00abf535c4ca4b22df2abeae345af214bd"
+    }
+  ]
+}

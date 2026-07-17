@@ -1,0 +1,8 @@
+Choose which candidate relation holds between the tagged Subject and Object in the query sentence.
+
+$relation_blocks
+
+Query Sentence: $query
+
+Output exactly one of these relation labels, or "no_relation" if none holds: $labels, no_relation.
+

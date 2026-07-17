@@ -1,0 +1,9 @@
+You are given a relation, its description, support sentences, and only the Subject and Object from a query.
+
+Relation: "$relation" ($description)
+$supports
+Query Subject: $subject
+Query Object: $object
+
+If the relation holds between the query entities, answer "yes"; otherwise answer "no". Output only "yes" or "no".
+

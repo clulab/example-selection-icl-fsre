@@ -1,0 +1,6 @@
+Reduce the following context to the minimum text needed to express the relation between the tagged Subject and Object.
+
+Context: $support
+
+Retain the <subject>...</subject> and <object>...</object> tags. Output only the summarized relation-bearing text.
+
