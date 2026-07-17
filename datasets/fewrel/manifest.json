@@ -1,0 +1,55 @@
+{
+  "dataset": "fewrel",
+  "files": [
+    {
+      "bytes": 873203,
+      "path": "episodes/seed_160290.jsonl.gz",
+      "sha256": "9835ec61691647b2eb8cbd92cabb5656003522d981eb3e45c5696e349463325e"
+    },
+    {
+      "bytes": 871444,
+      "path": "episodes/seed_160291.jsonl.gz",
+      "sha256": "1783bb99baa957ab3dc06aa9034d0ab6f57f2998aee4e0d161e0da44156993d1"
+    },
+    {
+      "bytes": 873201,
+      "path": "episodes/seed_160292.jsonl.gz",
+      "sha256": "3e015beefb3a4260144ac7b5312b94d8261915999423a77b26ce8202ef41d2cf"
+    },
+    {
+      "bytes": 872881,
+      "path": "episodes/seed_160293.jsonl.gz",
+      "sha256": "f52337bf7e2e8e72eea352fd2e66dbd8b734b77e87125220c95d61c0ca424a1f"
+    },
+    {
+      "bytes": 872814,
+      "path": "episodes/seed_160294.jsonl.gz",
+      "sha256": "e0478b06323d0c330142c7b048799249d66759b0979e87f11512d66881c738f3"
+    },
+    {
+      "bytes": 4823445,
+      "path": "query_examples.jsonl.gz",
+      "sha256": "4bcf2f22c326689740884d3d3ea7250aad04dbe42ea023041b9d04919f8ad87c"
+    },
+    {
+      "bytes": 3319,
+      "path": "relations.json",
+      "sha256": "cd3ffc22c40a8ef32b30f875ea658ae0533985dafe2f25fbceb52f9a3e5b3c25"
+    },
+    {
+      "bytes": 45889,
+      "path": "semantic_rules.jsonl.gz",
+      "sha256": "337aedf9e16bdfb6ff703a754b37ba2d88b18f778c6c39f4535865e1862ebab6"
+    },
+    {
+      "bytes": 4846245,
+      "path": "source_examples.jsonl.gz",
+      "sha256": "4c8d089937694eefac8fe71b827cc93fa80d4910a3d8b7fa4031b19a774d7fc0"
+    },
+    {
+      "bytes": 307709,
+      "path": "support_examples.jsonl.gz",
+      "sha256": "e0cfd2910b590d4c490421ec71c70a83f91ef657396643999d3b631a57e94a92"
+    }
+  ]
+}

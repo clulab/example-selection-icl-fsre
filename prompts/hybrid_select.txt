@@ -1,0 +1,9 @@
+Select the $count most diverse and relation-faithful examples from the candidates below.
+
+Relation: "$relation"
+Description: $description
+
+$candidates
+
+Output only a Python-style list of the selected one-based candidate numbers, for example [1, 4, 6].
+

@@ -1,0 +1,49 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local datasets and artifacts that must never be committed
+datasets/tacred/raw/
+datasets/tacred/authorized/
+datasets/umbc/
+checkpoints/
+embeddings/
+indices/
+models/
+cache/
+outputs/
+logs/
+results/
+
+# Large or unsafe serialization formats
+*.pkl
+*.pickle
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.faiss
+*.npy
+*.npz
+*.zip
+*.tgz
+*.tar.gz
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+nohup.out
+slurm-*
+

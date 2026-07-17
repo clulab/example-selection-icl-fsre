@@ -1,0 +1,8 @@
+accelerate>=0.30
+huggingface-hub>=0.23
+numpy>=1.26
+scikit-learn>=1.4
+torch>=2.3
+tqdm>=4.66
+transformers>=4.51
+

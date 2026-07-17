@@ -1,0 +1,10 @@
+Determine whether the tagged query entities are compatible with the expected entity roles of a relation.
+
+Relation: "$relation"
+Expected Subject type: $subject_type
+Expected Object type: $object_type
+Query Subject: $subject
+Query Object: $object
+
+Answer "yes" if the query entities can fill these relation roles; otherwise answer "no". Output only "yes" or "no".
+

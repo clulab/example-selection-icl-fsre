@@ -1,0 +1,11 @@
+You are given a relation, its description, support sentences that hold the relation, and a query sentence.
+
+A relation connects the Subject and Object. They are enclosed in <subject>...</subject> and <object>...</object> tags. Decide whether the same relation holds between the tagged entities in the query.
+
+Relation: "$relation" ($description)
+$supports
+
+Query Sentence: $query
+
+If the relation holds in the query, answer "yes"; otherwise answer "no". Output only "yes" or "no".
+
