@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +63,16 @@ def main() -> None:
     rng = random.Random(args.seed)
     output: list[dict[str, Any]] = []
 
-    for episode in read_jsonl(args.episodes):
+    episode_rows = list(read_jsonl(args.episodes))
+    episode_keys = [
+        (int(episode["set_id"]), int(episode["episode_id"]))
+        for episode in episode_rows
+    ]
+    remaining_queries = Counter(episode_keys)
+    total_episodes = len(remaining_queries)
+    completed_episodes = 0
+
+    for episode, episode_key in zip(episode_rows, episode_keys):
         query = queries[episode["query_id"]]
         support_records = [supports[item] for item in episode["support_ids"]]
         by_relation: dict[str, list[str]] = defaultdict(list)
@@ -138,6 +147,14 @@ def main() -> None:
                 "prediction": prediction,
             }
         )
+        remaining_queries[episode_key] -= 1
+        if remaining_queries[episode_key] == 0:
+            completed_episodes += 1
+            if completed_episodes % 100 == 0 or completed_episodes == total_episodes:
+                print(
+                    f"{completed_episodes}/{total_episodes} episodes complete",
+                    flush=True,
+                )
     write_jsonl(args.output, output)
 
 
