@@ -1,7 +1,9 @@
-"""Minimal Hugging Face wrapper used by generation and ICL inference."""
+"""Minimal Hugging Face and vLLM wrappers used by ICL inference."""
 
 from __future__ import annotations
 
+import inspect
+import math
 from collections.abc import Sequence
 
 import torch
@@ -9,6 +11,25 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config import GENERATION_SETTINGS, model_family
 from utils import batched, set_seed
+
+
+YesNoProbability = tuple[float, float]
+YesNoScore = tuple[bool, YesNoProbability | None]
+
+
+def _label_token_id(tokenizer, label: str) -> int:
+    token_ids = tokenizer.encode(label, add_special_tokens=False)
+    if len(token_ids) != 1:
+        raise ValueError(f"Expected {label!r} to be one token, found {token_ids}")
+    return int(token_ids[0])
+
+
+def _normalized_pair(yes_logprob: float, no_logprob: float) -> YesNoProbability:
+    maximum = max(yes_logprob, no_logprob)
+    yes = math.exp(yes_logprob - maximum)
+    no = math.exp(no_logprob - maximum)
+    total = yes + no
+    return yes / total, no / total
 
 
 class PaperLLM:
@@ -32,8 +53,8 @@ class PaperLLM:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.config.pad_token_id = self.tokenizer.pad_token_id
-        self.yes_token_id = self.tokenizer.encode("yes", add_special_tokens=False)[0]
-        self.no_token_id = self.tokenizer.encode("no", add_special_tokens=False)[0]
+        self.yes_token_id = _label_token_id(self.tokenizer, "yes")
+        self.no_token_id = _label_token_id(self.tokenizer, "no")
 
     def _chat_text(self, prompt: str) -> str:
         messages = [{"role": "user", "content": prompt}]
@@ -45,12 +66,17 @@ class PaperLLM:
             kwargs["enable_thinking"] = False
         return self.tokenizer.apply_chat_template(messages, **kwargs)
 
-    def score_yes_no(self, prompts: Sequence[str], batch_size: int = 8) -> list[bool]:
-        """Compare first-token yes/no logits, using yes on an exact tie."""
+    def score_yes_no_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoProbability]:
+        """Return probabilities normalized over the first-token yes/no logits."""
 
-        decisions: list[bool] = []
-        texts = [self._chat_text(prompt) for prompt in prompts]
-        for batch in batched(texts, batch_size):
+        probabilities: list[YesNoProbability] = []
+        total_prompts = len(prompts)
+        completed_prompts = 0
+        next_report = 10_000
+        for prompt_batch in batched(prompts, batch_size):
+            batch = [self._chat_text(prompt) for prompt in prompt_batch]
             inputs = self.tokenizer(
                 list(batch),
                 return_tensors="pt",
@@ -60,8 +86,34 @@ class PaperLLM:
             with torch.inference_mode():
                 output = self.model(**inputs, use_cache=False)
             logits = output.logits[:, -1, [self.yes_token_id, self.no_token_id]]
-            decisions.extend((logits[:, 0] >= logits[:, 1]).cpu().tolist())
-        return decisions
+            batch_probabilities = torch.softmax(logits.float(), dim=-1).cpu().tolist()
+            probabilities.extend(
+                (float(yes), float(no)) for yes, no in batch_probabilities
+            )
+            completed_prompts += len(prompt_batch)
+            if completed_prompts >= next_report or completed_prompts == total_prompts:
+                print(
+                    f"{completed_prompts}/{total_prompts} prompts scored",
+                    flush=True,
+                )
+                next_report = ((completed_prompts // 10_000) + 1) * 10_000
+        return probabilities
+
+    def score_yes_no(self, prompts: Sequence[str], batch_size: int = 8) -> list[bool]:
+        """Compare first-token yes/no probabilities, using yes on an exact tie."""
+
+        return [
+            decision
+            for decision, _ in self.score_yes_no_with_probabilities(
+                prompts, batch_size
+            )
+        ]
+
+    def score_yes_no_with_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoScore]:
+        probabilities = self.score_yes_no_probabilities(prompts, batch_size)
+        return [(yes >= no, (yes, no)) for yes, no in probabilities]
 
     def generate(
         self,
@@ -104,3 +156,128 @@ class PaperLLM:
             )
         return [response.strip() for response in responses]
 
+
+class VLLMPaperLLM:
+    """Offline vLLM backend for one-token yes/no probability scoring."""
+
+    def __init__(
+        self,
+        model_id: str,
+        tensor_parallel_size: int = 1,
+        seed: int = 42,
+    ) -> None:
+        try:
+            from vllm import LLM, SamplingParams
+        except ImportError as exc:
+            raise ImportError(
+                "The vLLM backend requires vllm; install requirements.txt"
+            ) from exc
+
+        self.model_id = model_id
+        self.family = model_family(model_id)
+        self.supports_selected_logprobs = (
+            "logprob_token_ids" in inspect.signature(SamplingParams).parameters
+        )
+        if not self.supports_selected_logprobs:
+            print(
+                "This vLLM version does not expose both yes/no probabilities; "
+                "probabilities will be saved as null.",
+                flush=True,
+            )
+        self.model = LLM(
+            model=model_id,
+            tensor_parallel_size=tensor_parallel_size,
+            trust_remote_code=True,
+            seed=seed,
+        )
+        self.tokenizer = self.model.get_tokenizer()
+        self.sampling_params_class = SamplingParams
+        self.yes_token_id = _label_token_id(self.tokenizer, "yes")
+        self.no_token_id = _label_token_id(self.tokenizer, "no")
+
+    def _chat_text(self, prompt: str) -> str:
+        messages = [{"role": "user", "content": prompt}]
+        kwargs = {
+            "tokenize": False,
+            "add_generation_prompt": True,
+        }
+        if self.family == "qwen":
+            kwargs["enable_thinking"] = False
+        return self.tokenizer.apply_chat_template(messages, **kwargs)
+
+    @staticmethod
+    def _logprob(value) -> float:
+        return float(value.logprob if hasattr(value, "logprob") else value)
+
+    def score_yes_no_with_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoScore]:
+        """Generate one constrained label and return probabilities when supported."""
+
+        del batch_size  # vLLM schedules the complete request list itself.
+        if not prompts:
+            return []
+
+        texts = [self._chat_text(prompt) for prompt in prompts]
+        sampling_kwargs: dict[str, object] = {
+            "temperature": 0.0,
+            "max_tokens": 1,
+            "min_tokens": 1,
+            "allowed_token_ids": [self.yes_token_id, self.no_token_id],
+        }
+        if self.supports_selected_logprobs:
+            sampling_kwargs["logprob_token_ids"] = [
+                self.yes_token_id,
+                self.no_token_id,
+            ]
+        sampling = self.sampling_params_class(**sampling_kwargs)
+        results = self.model.generate(texts, sampling_params=sampling, use_tqdm=True)
+        if len(results) != len(prompts):
+            raise RuntimeError(
+                f"vLLM returned {len(results)} results for {len(prompts)} prompts"
+            )
+
+        scores: list[YesNoScore] = []
+        for result in results:
+            if not result.outputs or not result.outputs[0].token_ids:
+                raise RuntimeError("vLLM did not generate a label token")
+            generated_token_id = int(result.outputs[0].token_ids[0])
+            if generated_token_id not in {self.yes_token_id, self.no_token_id}:
+                raise RuntimeError(
+                    f"vLLM generated unexpected token id {generated_token_id}"
+                )
+            decision = generated_token_id == self.yes_token_id
+            probability = None
+            if self.supports_selected_logprobs:
+                if not result.outputs[0].logprobs:
+                    raise RuntimeError(
+                        "vLLM did not return first-token log probabilities"
+                    )
+                token_logprobs = result.outputs[0].logprobs[0]
+                try:
+                    yes_logprob = self._logprob(token_logprobs[self.yes_token_id])
+                    no_logprob = self._logprob(token_logprobs[self.no_token_id])
+                except KeyError as exc:
+                    raise RuntimeError(
+                        "vLLM did not return both requested yes/no token probabilities"
+                    ) from exc
+                probability = _normalized_pair(yes_logprob, no_logprob)
+                decision = probability[0] >= probability[1]
+            scores.append((decision, probability))
+        return scores
+
+    def score_yes_no_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoProbability | None]:
+        return [
+            probability
+            for _, probability in self.score_yes_no_with_probabilities(
+                prompts, batch_size
+            )
+        ]
+
+    def score_yes_no(self, prompts: Sequence[str], batch_size: int = 8) -> list[bool]:
+        return [
+            decision
+            for decision, _ in self.score_yes_no_with_probabilities(prompts, batch_size)
+        ]

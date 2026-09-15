@@ -36,11 +36,16 @@ def binary_relation_prompt(
     supports: Iterable[str],
     query: str,
 ) -> str:
+    support_sentences = list(supports)
+    if len(support_sentences) != 1:
+        raise ValueError(
+            "The paper's binary 1-shot prompt requires exactly one support sentence"
+        )
     return render(
         "binary_relation",
         relation=relation,
         description=description,
-        supports=numbered_supports(supports),
+        support_sentence=support_sentences[0],
         query=query,
     )
 
@@ -65,4 +70,3 @@ def multiclass_prompt(
         labels=", ".join(labels),
         query=query,
     )
-

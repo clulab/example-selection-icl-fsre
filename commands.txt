@@ -1,0 +1,19 @@
+1. Run inference
+
+This runs the full TACRED 1-shot experiment on GPU 0 and saves the predictions. (entity filtering is disabled from the command)
+
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --episodes datasets/tacred/authorized/episodes_50k.jsonl.gz \
+  --supports datasets/tacred/authorized/support_examples.jsonl.gz \
+  --queries datasets/tacred/authorized/query_examples.jsonl.gz \
+  --relations datasets/tacred/authorized/relations.json \
+  --model Qwen/Qwen3-4B \
+  --backend hf \
+  --batch-size 8 \
+  --output outputs/tacred_1shot_predictions.jsonl.gz
+
+2. Evaluate
+
+This prints the precision, recall, and F1 results and saves them as JSON.
+
+python evaluate.py outputs/tacred_1shot_predictions.jsonl.gz

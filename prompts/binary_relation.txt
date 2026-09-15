@@ -1,11 +1,11 @@
-You are given a relation, its description, support sentences that hold the relation, and a query sentence.
+You are given below a Relation name, a Description of the relation in brackets, a Support sentence (an example sentence) that holds the given relation between the Object and the Subject, and a Query sentence.
 
-A relation connects the Subject and Object. They are enclosed in <subject>...</subject> and <object>...</object> tags. Decide whether the same relation holds between the tagged entities in the query.
+A relation connects the Subject and the Object. The Subject and the Object are given within the subject and object tags respectively. You need to decide whether the relation between the Subject and the Object of the Query sentence holds the given relation or not.
 
-Relation: "$relation" ($description)
-$supports
+Relation name: "$relation" ($description)
+Support Sentence: $support_sentence
 
 Query Sentence: $query
 
-If the relation holds in the query, answer "yes"; otherwise answer "no". Output only "yes" or "no".
-
+If the relation between the subject and the object in Query sentence matches the given Relation name given say yes, otherwise no.
+Just output "yes" or "no", and nothing else
