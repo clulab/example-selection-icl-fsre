@@ -72,6 +72,9 @@ class PaperLLM:
         """Return probabilities normalized over the first-token yes/no logits."""
 
         probabilities: list[YesNoProbability] = []
+        total_prompts = len(prompts)
+        completed_prompts = 0
+        next_report = 10_000
         for prompt_batch in batched(prompts, batch_size):
             batch = [self._chat_text(prompt) for prompt in prompt_batch]
             inputs = self.tokenizer(
@@ -87,6 +90,13 @@ class PaperLLM:
             probabilities.extend(
                 (float(yes), float(no)) for yes, no in batch_probabilities
             )
+            completed_prompts += len(prompt_batch)
+            if completed_prompts >= next_report or completed_prompts == total_prompts:
+                print(
+                    f"{completed_prompts}/{total_prompts} prompts scored",
+                    flush=True,
+                )
+                next_report = ((completed_prompts // 10_000) + 1) * 10_000
         return probabilities
 
     def score_yes_no(self, prompts: Sequence[str], batch_size: int = 8) -> list[bool]:
