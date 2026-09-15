@@ -155,13 +155,13 @@ def main() -> None:
                 f"Scoring {len(filter_prompts)} entity-filter prompts with {args.backend}",
                 flush=True,
             )
-            filter_probabilities = llm.score_yes_no_probabilities(
+            filter_scores = llm.score_yes_no_with_probabilities(
                 filter_prompts, batch_size=args.batch_size
             )
-            for (context_index, name), (yes, no) in zip(
-                filter_references, filter_probabilities
+            for (context_index, name), (decision, _) in zip(
+                filter_references, filter_scores
             ):
-                allowed_by_context[context_index][name] = yes >= no
+                allowed_by_context[context_index][name] = decision
 
         prompts: list[str] = []
         prompt_references: list[tuple[int, str]] = []
@@ -194,27 +194,28 @@ def main() -> None:
             f"Scoring {len(prompts)} binary relation prompts with {args.backend}",
             flush=True,
         )
-        scored_probabilities = llm.score_yes_no_probabilities(
+        scores = llm.score_yes_no_with_probabilities(
             prompts, batch_size=args.batch_size
         )
-        if len(scored_probabilities) != len(prompt_references):
+        if len(scores) != len(prompt_references):
             raise RuntimeError("The model returned an unexpected number of scores")
 
         votes_by_context = [
             {name: False for name in context["candidate_relations"]}
             for context in contexts
         ]
-        probabilities_by_context: list[dict[str, dict[str, float]]] = [
+        probabilities_by_context: list[dict[str, dict[str, float] | None]] = [
             {} for _ in contexts
         ]
-        for (context_index, name), (yes, no) in zip(
-            prompt_references, scored_probabilities
+        for (context_index, name), (decision, probability) in zip(
+            prompt_references, scores
         ):
-            votes_by_context[context_index][name] = yes >= no
-            probabilities_by_context[context_index][name] = {
-                "yes": yes,
-                "no": no,
-            }
+            votes_by_context[context_index][name] = decision
+            probabilities_by_context[context_index][name] = (
+                None
+                if probability is None
+                else {"yes": probability[0], "no": probability[1]}
+            )
 
         for context_index, context in enumerate(contexts):
             episode = context["episode"]

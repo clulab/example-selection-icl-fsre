@@ -14,6 +14,7 @@ from utils import batched, set_seed
 
 
 YesNoProbability = tuple[float, float]
+YesNoScore = tuple[bool, YesNoProbability | None]
 
 
 def _label_token_id(tokenizer, label: str) -> int:
@@ -92,9 +93,17 @@ class PaperLLM:
         """Compare first-token yes/no probabilities, using yes on an exact tie."""
 
         return [
-            yes >= no
-            for yes, no in self.score_yes_no_probabilities(prompts, batch_size)
+            decision
+            for decision, _ in self.score_yes_no_with_probabilities(
+                prompts, batch_size
+            )
         ]
+
+    def score_yes_no_with_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoScore]:
+        probabilities = self.score_yes_no_probabilities(prompts, batch_size)
+        return [(yes >= no, (yes, no)) for yes, no in probabilities]
 
     def generate(
         self,
@@ -154,14 +163,17 @@ class VLLMPaperLLM:
                 "The vLLM backend requires vllm; install requirements.txt"
             ) from exc
 
-        if "logprob_token_ids" not in inspect.signature(SamplingParams).parameters:
-            raise RuntimeError(
-                "This probability mode requires vLLM >= 0.29; "
-                "install the version from requirements.txt"
-            )
-
         self.model_id = model_id
         self.family = model_family(model_id)
+        self.supports_selected_logprobs = (
+            "logprob_token_ids" in inspect.signature(SamplingParams).parameters
+        )
+        if not self.supports_selected_logprobs:
+            print(
+                "This vLLM version does not expose both yes/no probabilities; "
+                "probabilities will be saved as null.",
+                flush=True,
+            )
         self.model = LLM(
             model=model_id,
             tensor_parallel_size=tensor_parallel_size,
@@ -187,46 +199,75 @@ class VLLMPaperLLM:
     def _logprob(value) -> float:
         return float(value.logprob if hasattr(value, "logprob") else value)
 
-    def score_yes_no_probabilities(
+    def score_yes_no_with_probabilities(
         self, prompts: Sequence[str], batch_size: int = 8
-    ) -> list[YesNoProbability]:
-        """Pass all prompts to vLLM and return normalized yes/no probabilities."""
+    ) -> list[YesNoScore]:
+        """Generate one constrained label and return probabilities when supported."""
 
         del batch_size  # vLLM schedules the complete request list itself.
         if not prompts:
             return []
 
         texts = [self._chat_text(prompt) for prompt in prompts]
-        sampling = self.sampling_params_class(
-            temperature=0.0,
-            max_tokens=1,
-            min_tokens=1,
-            allowed_token_ids=[self.yes_token_id, self.no_token_id],
-            logprob_token_ids=[self.yes_token_id, self.no_token_id],
-        )
+        sampling_kwargs: dict[str, object] = {
+            "temperature": 0.0,
+            "max_tokens": 1,
+            "min_tokens": 1,
+            "allowed_token_ids": [self.yes_token_id, self.no_token_id],
+        }
+        if self.supports_selected_logprobs:
+            sampling_kwargs["logprob_token_ids"] = [
+                self.yes_token_id,
+                self.no_token_id,
+            ]
+        sampling = self.sampling_params_class(**sampling_kwargs)
         results = self.model.generate(texts, sampling_params=sampling, use_tqdm=True)
         if len(results) != len(prompts):
             raise RuntimeError(
                 f"vLLM returned {len(results)} results for {len(prompts)} prompts"
             )
 
-        probabilities: list[YesNoProbability] = []
+        scores: list[YesNoScore] = []
         for result in results:
-            if not result.outputs or not result.outputs[0].logprobs:
-                raise RuntimeError("vLLM did not return first-token log probabilities")
-            token_logprobs = result.outputs[0].logprobs[0]
-            try:
-                yes_logprob = self._logprob(token_logprobs[self.yes_token_id])
-                no_logprob = self._logprob(token_logprobs[self.no_token_id])
-            except KeyError as exc:
+            if not result.outputs or not result.outputs[0].token_ids:
+                raise RuntimeError("vLLM did not generate a label token")
+            generated_token_id = int(result.outputs[0].token_ids[0])
+            if generated_token_id not in {self.yes_token_id, self.no_token_id}:
                 raise RuntimeError(
-                    "vLLM did not return both requested yes/no token probabilities"
-                ) from exc
-            probabilities.append(_normalized_pair(yes_logprob, no_logprob))
-        return probabilities
+                    f"vLLM generated unexpected token id {generated_token_id}"
+                )
+            decision = generated_token_id == self.yes_token_id
+            probability = None
+            if self.supports_selected_logprobs:
+                if not result.outputs[0].logprobs:
+                    raise RuntimeError(
+                        "vLLM did not return first-token log probabilities"
+                    )
+                token_logprobs = result.outputs[0].logprobs[0]
+                try:
+                    yes_logprob = self._logprob(token_logprobs[self.yes_token_id])
+                    no_logprob = self._logprob(token_logprobs[self.no_token_id])
+                except KeyError as exc:
+                    raise RuntimeError(
+                        "vLLM did not return both requested yes/no token probabilities"
+                    ) from exc
+                probability = _normalized_pair(yes_logprob, no_logprob)
+                decision = probability[0] >= probability[1]
+            scores.append((decision, probability))
+        return scores
+
+    def score_yes_no_probabilities(
+        self, prompts: Sequence[str], batch_size: int = 8
+    ) -> list[YesNoProbability | None]:
+        return [
+            probability
+            for _, probability in self.score_yes_no_with_probabilities(
+                prompts, batch_size
+            )
+        ]
 
     def score_yes_no(self, prompts: Sequence[str], batch_size: int = 8) -> list[bool]:
         return [
-            yes >= no
-            for yes, no in self.score_yes_no_probabilities(prompts, batch_size)
+            decision
+            for decision, _ in self.score_yes_no_with_probabilities(prompts, batch_size)
         ]
