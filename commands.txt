@@ -1,13 +1,6 @@
-TACRED 1-shot inference and evaluation
-========================================
-
-Run these commands from the repository root after installing requirements.txt.
-The authorized TACRED files must be available under datasets/tacred/authorized/.
-Change GPU 0, the model name, or the batch size if needed.
-
 1. Run inference
 
-This runs the full TACRED 1-shot experiment on GPU 0 and saves the predictions.
+This runs the full TACRED 1-shot experiment on GPU 0, uses the saved Qwen3-4B entity-filter map, and saves the predictions. The map flag enables filtering without recomputing it.
 
 CUDA_VISIBLE_DEVICES=0 python run_inference.py \
   --episodes datasets/tacred/authorized/episodes_50k.jsonl.gz \
@@ -17,12 +10,11 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
   --model Qwen/Qwen3-4B \
   --backend hf \
   --batch-size 8 \
-  --entity-filter \
+  --entity-filter-map datasets/tacred/fs_tacred_entity_resolution_Qwen-Qwen3-4B.pkl \
   --output outputs/tacred_1shot_predictions.jsonl.gz
 
 2. Evaluate
 
 This prints the precision, recall, and F1 results and saves them as JSON.
 
-python evaluate.py outputs/tacred_1shot_predictions.jsonl.gz \
-  | tee outputs/tacred_1shot_metrics.json
+python evaluate.py outputs/tacred_1shot_predictions.jsonl.gz

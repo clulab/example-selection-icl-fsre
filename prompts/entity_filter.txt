@@ -1,10 +1,12 @@
-Determine whether the tagged query entities are compatible with the expected entity roles of a relation.
+You are given a sentence below where an entity or segment is selected and marked under entity tag. Your are also given entity types.
 
-Relation: "$relation"
-Expected Subject type: $subject_type
-Expected Object type: $object_type
-Query Subject: $subject
-Query Object: $object
+Sentence: $sentence
+Entity: $entity
+Entity Type: $entity_type
 
-Answer "yes" if the query entities can fill these relation roles; otherwise answer "no". Output only "yes" or "no".
+Your task is to validate whether the selected entity or segment "$entity" in the sentence either:
+1. belongs to the entity type "$entity_type"
+or,
+2. is a co-reference (such as a pronoun or other referring expression) that points to an entity that belongs to entity type "$entity_type"
 
+Only answer "yes" or "no", nothing else.

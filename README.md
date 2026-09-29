@@ -57,6 +57,8 @@ python run_inference.py \
 
 The same command supports FewRel and authorized TACRED data using the common JSONL schema. Pass selected or generated examples through `--extra-examples` for 5- or 10-shot experiments.
 
+Use `--entity-filter` to recompute the paper's subject/object compatibility filter. To reuse a trusted saved filter map without recomputing it, pass `--entity-filter-map /path/to/entity_resolution.pkl` instead; the map option enables entity filtering by itself.
+
 ## Evaluate
 
 ```bash

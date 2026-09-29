@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import random
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from config import NO_RELATION
-from entity_filter import build_filter_prompt
+from entity_filter import filter_prompts as build_filter_prompts
+from entity_filter import load_entity_filter_map
 from model import PaperLLM, VLLMPaperLLM
 from prompts import binary_relation_prompt, multiclass_prompt, numbered_supports, render
 from utils import entity_text, index_jsonl, read_json, read_jsonl, tagged_sentence, write_jsonl
@@ -52,12 +52,25 @@ def main() -> None:
     parser.add_argument("--tensor-parallel-size", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--entity-filter", action="store_true")
+    parser.add_argument(
+        "--entity-filter",
+        action="store_true",
+        help="Recompute the paper's subject/object entity filter with the model.",
+    )
+    parser.add_argument(
+        "--entity-filter-map",
+        help=(
+            "Trusted pickle containing saved query/relation filter decisions. "
+            "This implies entity filtering and skips filter recomputation."
+        ),
+    )
     parser.add_argument("--mode", choices=("binary", "multiclass"), default="binary")
     parser.add_argument("--parametric", action="store_true")
     args = parser.parse_args()
     if args.backend == "vllm" and args.mode != "binary":
         parser.error("The vLLM backend supports --mode binary only")
+    if (args.entity_filter or args.entity_filter_map) and args.mode != "binary":
+        parser.error("Entity filtering supports --mode binary only")
     if args.tensor_parallel_size < 1:
         parser.error("--tensor-parallel-size must be positive")
 
@@ -93,7 +106,6 @@ def main() -> None:
     else:
         llm = PaperLLM(args.model, device_map=args.device_map)
 
-    rng = random.Random(args.seed)
     output: list[dict[str, Any]] = []
 
     if args.mode == "multiclass":
@@ -131,30 +143,60 @@ def main() -> None:
             {name: True for name in context["candidate_relations"]}
             for context in contexts
         ]
-        if args.entity_filter:
-            filter_prompts: list[str] = []
-            filter_references: list[tuple[int, str]] = []
+        if args.entity_filter_map:
+            print(f"Loading entity-filter map from {args.entity_filter_map}", flush=True)
+            saved_filter = load_entity_filter_map(args.entity_filter_map)
             for context_index, context in enumerate(contexts):
-                for name in context["candidate_relations"]:
-                    filter_prompts.append(
-                        build_filter_prompt(
-                            context["query"],
-                            name,
-                            relations[name],
-                        )
+                query_id = str(context["query"]["id"])
+                if query_id not in saved_filter:
+                    raise KeyError(
+                        f"Entity-filter map has no decisions for query {query_id!r}"
                     )
-                    filter_references.append((context_index, name))
+                for name in context["candidate_relations"]:
+                    if name not in saved_filter[query_id]:
+                        raise KeyError(
+                            "Entity-filter map has no decision for "
+                            f"query {query_id!r}, relation {name!r}"
+                        )
+                    allowed_by_context[context_index][name] = saved_filter[query_id][
+                        name
+                    ]
+        elif args.entity_filter:
+            filter_prompt_texts: list[str] = []
+            filter_references: list[tuple[str, str]] = []
+            unique_pairs: dict[tuple[str, str], tuple[dict[str, Any], str]] = {}
+            for context in contexts:
+                query_id = str(context["query"]["id"])
+                for name in context["candidate_relations"]:
+                    unique_pairs.setdefault(
+                        (query_id, name), (context["query"], name)
+                    )
+            for pair, (query, name) in unique_pairs.items():
+                pair_prompts = build_filter_prompts(query, relations[name])
+                filter_prompt_texts.extend(pair_prompts)
+                filter_references.extend([pair] * len(pair_prompts))
             print(
-                f"Scoring {len(filter_prompts)} entity-filter prompts with {args.backend}",
+                f"Scoring {len(filter_prompt_texts)} entity-filter prompts "
+                f"with {args.backend}",
                 flush=True,
             )
             filter_scores = llm.score_yes_no_with_probabilities(
-                filter_prompts, batch_size=args.batch_size
+                filter_prompt_texts, batch_size=args.batch_size
             )
-            for (context_index, name), (decision, _) in zip(
-                filter_references, filter_scores
-            ):
-                allowed_by_context[context_index][name] = decision
+            if len(filter_scores) != len(filter_references):
+                raise RuntimeError(
+                    "The model returned an unexpected number of entity-filter scores"
+                )
+            decisions_by_pair = {pair: True for pair in unique_pairs}
+            for pair, (decision, _) in zip(filter_references, filter_scores):
+                if not decision:
+                    decisions_by_pair[pair] = False
+            for context_index, context in enumerate(contexts):
+                query_id = str(context["query"]["id"])
+                for name in context["candidate_relations"]:
+                    allowed_by_context[context_index][name] = decisions_by_pair[
+                        (query_id, name)
+                    ]
 
         prompts: list[str] = []
         prompt_references: list[tuple[int, str]] = []
@@ -216,7 +258,7 @@ def main() -> None:
             candidate_relations = context["candidate_relations"]
             votes = votes_by_context[context_index]
             positive = [name for name, decision in votes.items() if decision]
-            prediction = rng.choice(positive) if positive else NO_RELATION
+            prediction = positive[0] if positive else NO_RELATION
             output.append(
                 {
                     "set_id": episode["set_id"],
