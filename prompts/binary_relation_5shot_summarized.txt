@@ -1,0 +1,15 @@
+You are given below a Relation name, a Description of the relation in brackets, Summerized version of 5 Support sentences (example sentences) that holds the given relation between the Object and the Subject, and a Query sentence.
+
+A relation connects the Subject and the Object. The Subject and the Object are given within the subject and object tags respectively. Note that you are given summerized version of the support sentence. You need to decide whether the relation between the Subject and the Object of the Query sentence holds the given relation or not.
+
+Relation name: "$relation" ($description)
+Support Sentence 1: $support_sentence_1
+Support Sentence 2: $support_sentence_2
+Support Sentence 3: $support_sentence_3
+Support Sentence 4: $support_sentence_4
+Support Sentence 5: $support_sentence_5
+
+Query Sentence: $query
+
+If the relation between the subject and the object in Query sentence matches the given Relation name given say yes, otherwise no.
+Just output "yes" or "no", and nothing else

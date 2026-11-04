@@ -23,18 +23,79 @@ def relation_map(path: str | Path) -> dict[str, dict[str, str]]:
     return entries
 
 
-def extra_example_map(path: str | None) -> dict[str, list[str]]:
+def extra_example_map(
+    path: str | None,
+    method: str | None = None,
+    additional_count: int | None = None,
+) -> dict[str, dict[str, Any]]:
     if path is None:
         return {}
-    mapped = {}
+    mapped: dict[str, dict[str, Any]] = {}
+    available: set[tuple[str, int]] = set()
+    uses_unified_schema = False
     for row in read_jsonl(path):
+        row_method = row.get("method")
+        row_count = row.get("additional_count")
+        if (row_method is None) != (row_count is None):
+            raise ValueError(
+                "An extra-example row must provide both method and additional_count"
+            )
+        if row_method is not None:
+            uses_unified_schema = True
+            selector = (str(row_method), int(row_count))
+            available.add(selector)
+            if method is None or additional_count is None or selector != (
+                method,
+                additional_count,
+            ):
+                continue
+
         examples = row["examples"]
         support_id = row.get("support_id", row.get("id"))
         if support_id is None:
             raise KeyError("An extra-example row must contain support_id or id")
-        mapped[support_id] = [
+        if support_id in mapped:
+            raise ValueError(
+                "Duplicate extra-example row for "
+                f"support {support_id!r}, method {method!r}, count {additional_count!r}"
+            )
+        sentences = [
             item["sentence"] if isinstance(item, dict) else item for item in examples
         ]
+        expected = int(row_count) if row_count is not None else additional_count
+        if expected is not None and len(sentences) != expected:
+            raise ValueError(
+                f"Support {support_id!r} has {len(sentences)} additional examples; "
+                f"expected {expected}"
+            )
+        summarized = bool(row.get("summarized", False))
+        source_sentence = row.get("source_sentence")
+        if summarized and not source_sentence:
+            raise ValueError(
+                f"Summarized row for support {support_id!r} has no source_sentence"
+            )
+        mapped[str(support_id)] = {
+            "examples": sentences,
+            "source_sentence": source_sentence,
+            "summarized": summarized,
+        }
+
+    if uses_unified_schema and (method is None or additional_count is None):
+        choices = ", ".join(
+            f"{name}:{count}" for name, count in sorted(available)
+        )
+        raise ValueError(
+            "This unified extra-example file requires --extra-method and "
+            f"--additional-count. Available variants: {choices}"
+        )
+    if uses_unified_schema and not mapped:
+        choices = ", ".join(
+            f"{name}:{count}" for name, count in sorted(available)
+        )
+        raise ValueError(
+            f"No rows found for method={method!r}, additional_count={additional_count!r}. "
+            f"Available variants: {choices}"
+        )
     return mapped
 
 
@@ -45,6 +106,16 @@ def main() -> None:
     parser.add_argument("--queries", required=True)
     parser.add_argument("--relations", required=True)
     parser.add_argument("--extra-examples")
+    parser.add_argument(
+        "--extra-method",
+        help="Method to select from a unified additional-examples JSONL file.",
+    )
+    parser.add_argument(
+        "--additional-count",
+        type=int,
+        choices=(4, 9),
+        help="Use four (5-shot) or nine (10-shot) additional examples.",
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--backend", choices=("hf", "vllm"), default="hf")
@@ -73,27 +144,50 @@ def main() -> None:
         parser.error("Entity filtering supports --mode binary only")
     if args.tensor_parallel_size < 1:
         parser.error("--tensor-parallel-size must be positive")
+    if bool(args.extra_method) != (args.additional_count is not None):
+        parser.error("--extra-method and --additional-count must be used together")
+    if (args.extra_method or args.additional_count is not None) and not args.extra_examples:
+        parser.error("--extra-method/--additional-count require --extra-examples")
 
     supports = index_jsonl(args.supports)
     queries = index_jsonl(args.queries)
     relations = relation_map(args.relations)
-    extras = extra_example_map(args.extra_examples)
+    extras = extra_example_map(
+        args.extra_examples,
+        method=args.extra_method,
+        additional_count=args.additional_count,
+    )
     episode_rows = list(read_jsonl(args.episodes))
     contexts: list[dict[str, Any]] = []
     for episode in episode_rows:
         query = queries[episode["query_id"]]
         support_records = [supports[item] for item in episode["support_ids"]]
         by_relation: dict[str, list[str]] = defaultdict(list)
+        summarized_values: set[bool] = set()
         for support in support_records:
             relation = support["relation"]
-            by_relation[relation].append(tagged_sentence(support))
-            by_relation[relation].extend(extras.get(support["id"], []))
+            variant = extras.get(str(support["id"]))
+            if args.extra_examples and variant is None:
+                raise KeyError(
+                    f"No selected additional examples for support {support['id']!r}"
+                )
+            if variant is None:
+                by_relation[relation].append(tagged_sentence(support))
+            else:
+                by_relation[relation].append(
+                    variant["source_sentence"] or tagged_sentence(support)
+                )
+                by_relation[relation].extend(variant["examples"])
+                summarized_values.add(bool(variant["summarized"]))
+        if len(summarized_values) > 1:
+            raise ValueError("An episode mixes summarized and original support variants")
         contexts.append(
             {
                 "episode": episode,
                 "query": query,
                 "by_relation": dict(by_relation),
                 "candidate_relations": list(by_relation),
+                "summarized": next(iter(summarized_values), False),
             }
         )
 
@@ -221,6 +315,7 @@ def main() -> None:
                         relations[name]["description"],
                         by_relation[name],
                         tagged_sentence(query),
+                        summarized=context["summarized"],
                     )
                 prompts.append(prompt)
                 prompt_references.append((context_index, name))

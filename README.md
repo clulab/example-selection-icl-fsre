@@ -55,7 +55,23 @@ python run_inference.py \
   --output outputs/predictions.jsonl.gz
 ```
 
-The same command supports FewRel and authorized TACRED data using the common JSONL schema. Pass selected or generated examples through `--extra-examples` for 5- or 10-shot experiments.
+The same command supports FewRel and authorized TACRED data using the common JSONL schema. Pass selected or generated examples through `--extra-examples` for 5- or 10-shot experiments. A unified file containing several variants is selected with `--extra-method` and `--additional-count`:
+
+```bash
+python run_inference.py \
+  --episodes datasets/tacred/authorized/episodes_50k.jsonl.gz \
+  --supports datasets/tacred/authorized/support_examples.jsonl.gz \
+  --queries datasets/tacred/authorized/query_examples.jsonl.gz \
+  --relations datasets/tacred/authorized/relations.json \
+  --extra-examples datasets/tacred/authorized/additional_examples_qwen3_4b.jsonl.gz \
+  --extra-method softmatcher_closest \
+  --additional-count 4 \
+  --model Qwen/Qwen3-4B \
+  --entity-filter-map datasets/tacred/fs_tacred_entity_resolution_Qwen-Qwen3-4B.pkl \
+  --output outputs/tacred_softmatcher_1plus4.jsonl.gz
+```
+
+Use `--additional-count 4` for `1+4` and `--additional-count 9` for `1+9`. The renderer automatically uses the exact 5-shot or 10-shot prompt from the original experiments, including the original summarized prompt for methods ending in `_summarized`.
 
 Use `--entity-filter` to recompute the paper's subject/object compatibility filter. To reuse a trusted saved filter map without recomputing it, pass `--entity-filter-map /path/to/entity_resolution.pkl` instead; the map option enables entity filtering by itself.
 

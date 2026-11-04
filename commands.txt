@@ -1,4 +1,4 @@
-1. Run inference
+1. Run the 1+0 baseline
 
 This runs the full TACRED 1-shot experiment on GPU 0, uses the saved Qwen3-4B entity-filter map, and saves the predictions. The map flag enables filtering without recomputing it.
 
@@ -13,8 +13,69 @@ CUDA_VISIBLE_DEVICES=0 python run_inference.py \
   --entity-filter-map datasets/tacred/fs_tacred_entity_resolution_Qwen-Qwen3-4B.pkl \
   --output outputs/tacred_1shot_predictions.jsonl.gz
 
-2. Evaluate
+2. Run a 1+4 experiment
+
+This example uses the original gold support plus four SoftMatcher-retrieved examples. Change --extra-method to select another method from the list below.
+
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --episodes datasets/tacred/authorized/episodes_50k.jsonl.gz \
+  --supports datasets/tacred/authorized/support_examples.jsonl.gz \
+  --queries datasets/tacred/authorized/query_examples.jsonl.gz \
+  --relations datasets/tacred/authorized/relations.json \
+  --extra-examples datasets/tacred/authorized/additional_examples_qwen3_4b.jsonl.gz \
+  --extra-method softmatcher_closest \
+  --additional-count 4 \
+  --model Qwen/Qwen3-4B \
+  --backend hf \
+  --batch-size 8 \
+  --entity-filter-map datasets/tacred/fs_tacred_entity_resolution_Qwen-Qwen3-4B.pkl \
+  --output outputs/tacred_softmatcher_1plus4.jsonl.gz
+
+3. Run a 1+9 experiment
+
+This uses the same method with nine additional examples and automatically selects the exact original 10-shot prompt.
+
+CUDA_VISIBLE_DEVICES=0 python run_inference.py \
+  --episodes datasets/tacred/authorized/episodes_50k.jsonl.gz \
+  --supports datasets/tacred/authorized/support_examples.jsonl.gz \
+  --queries datasets/tacred/authorized/query_examples.jsonl.gz \
+  --relations datasets/tacred/authorized/relations.json \
+  --extra-examples datasets/tacred/authorized/additional_examples_qwen3_4b.jsonl.gz \
+  --extra-method softmatcher_closest \
+  --additional-count 9 \
+  --model Qwen/Qwen3-4B \
+  --backend hf \
+  --batch-size 8 \
+  --entity-filter-map datasets/tacred/fs_tacred_entity_resolution_Qwen-Qwen3-4B.pkl \
+  --output outputs/tacred_softmatcher_1plus9.jsonl.gz
+
+Available --extra-method values:
+
+llm_generated
+llm_paraphrased
+sbert_closest
+softmatcher_closest
+softmatcher_kmeans_random
+softmatcher_kmeans_closest
+softmatcher_kmeanspp_farthest
+softmatcher_kmeanspp_closest
+hybrid_sbert_closest
+hybrid_softmatcher_closest
+hybrid_softmatcher_kmeans_random
+hybrid_softmatcher_kmeans_closest
+hybrid_softmatcher_kmeanspp_farthest
+hybrid_softmatcher_kmeanspp_closest
+softmatcher_kmeans_random_summarized
+softmatcher_kmeans_closest_summarized
+softmatcher_kmeanspp_farthest_summarized
+softmatcher_kmeanspp_closest_summarized
+hybrid_softmatcher_kmeans_random_summarized
+hybrid_softmatcher_kmeans_closest_summarized
+hybrid_softmatcher_kmeanspp_farthest_summarized
+hybrid_softmatcher_kmeanspp_closest_summarized
+
+4. Evaluate
 
 This prints the precision, recall, and F1 results and saves them as JSON.
 
-python evaluate.py outputs/tacred_1shot_predictions.jsonl.gz
+python evaluate.py outputs/tacred_softmatcher_1plus4.jsonl.gz
